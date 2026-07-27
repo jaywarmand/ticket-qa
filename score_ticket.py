@@ -15,6 +15,8 @@ The webhook path is protected by verifying HubSpot's request signature so
 random callers can't run your model budget.
 """
 
+import _env  # noqa: F401  — loads .env before hubspot_client/llm read os.environ
+
 import os
 import sys
 import json

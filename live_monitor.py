@@ -19,6 +19,8 @@ CLI:
     python live_monitor.py closure <ticket_id> [--dry-run]
 """
 
+import _env  # noqa: F401  — loads .env before hubspot_client/llm read os.environ
+
 import os
 import sys
 import json
