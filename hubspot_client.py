@@ -13,6 +13,7 @@ conversations.read.
 """
 
 import os
+import sys
 import html
 import re
 import requests
@@ -35,6 +36,13 @@ def _headers():
     if not TOKEN:
         raise RuntimeError("HUBSPOT_TOKEN not set")
     return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+
+def _warn(msg):
+    """Surface API problems (e.g. a missing scope returning 403) on stderr
+    instead of silently returning empty data. Silent empties masquerade as a
+    thin ticket and skew scores low, hiding the real cause."""
+    print(f"[hubspot_client] WARNING: {msg}", file=sys.stderr)
 
 
 def _clean(text):
@@ -68,6 +76,8 @@ def _get_association_ids(ticket_id, to_type):
     url = f"{BASE}/crm/v4/objects/tickets/{ticket_id}/associations/{to_type}"
     r = requests.get(url, headers=_headers(), timeout=30)
     if r.status_code != 200:
+        _warn(f"associations {to_type} for ticket {ticket_id} -> HTTP "
+              f"{r.status_code}: {r.text[:200]}")
         return []
     return [row["toObjectId"] for row in r.json().get("results", [])]
 
@@ -79,6 +89,8 @@ def _batch_read(obj_type, ids, props):
     body = {"properties": props, "inputs": [{"id": str(i)} for i in ids]}
     r = requests.post(url, headers=_headers(), json=body, timeout=30)
     if r.status_code != 200:
+        _warn(f"batch read {obj_type} ({len(ids)} ids) -> HTTP "
+              f"{r.status_code}: {r.text[:200]}")
         return []
     return r.json().get("results", [])
 
@@ -151,6 +163,8 @@ def _collect_conversations(ticket_id):
     for tid in thread_ids:
         m = requests.get(f"{url}/{tid}/messages", headers=_headers(), timeout=30)
         if m.status_code != 200:
+            _warn(f"conversation thread {tid} messages -> HTTP "
+                  f"{m.status_code}: {m.text[:200]}")
             continue
         for msg in m.json().get("results", []):
             # Real messages are messageType "CommonMessage"; skip system/bot noise.

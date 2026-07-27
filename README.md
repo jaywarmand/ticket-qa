@@ -19,6 +19,8 @@ Settings → Integrations → Private Apps → Create. Scopes:
 - `tickets` (read + write)
 - `crm.objects.contacts.read`
 - `conversations.read`
+- `sales-email-read` (read logged email engagement bodies — REQUIRED, or
+  emails 403 and the transcript silently loses all email content)
 
 Copy the access token → env `HUBSPOT_TOKEN`.
 Copy the app's Client Secret → env `HUBSPOT_CLIENT_SECRET` (for webhook signature check).
