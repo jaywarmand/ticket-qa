@@ -32,6 +32,12 @@ import hubspot_client as hs
 from live_prompts import RISK_PROMPT, CLOSURE_GATE_PROMPT
 
 PROVIDER = os.environ.get("PROVIDER", "anthropic").lower()
+
+# Output-size ceiling for the model's JSON response (scores + reasons).
+# Tunable via env without code changes; raise together with the sentence
+# guidance in the prompt(s) if you want longer reasons.
+_ANTHROPIC_MAX_TOKENS = int(os.environ.get("ANTHROPIC_MAX_TOKENS", "1536"))
+_OPENAI_MAX_TOKENS = int(os.environ.get("OPENAI_MAX_TOKENS", "1536"))
 HISTORY_MAX = 6  # how many prior sentiment points to keep
 
 # In warn-only mode the gate never blocks; flip to True once you trust it and
@@ -48,7 +54,7 @@ def _call_model(system_prompt, transcript):
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {key}",
                      "Content-Type": "application/json"},
-            json={"model": model, "temperature": 0,
+            json={"model": model, "temperature": 0, "max_tokens": _OPENAI_MAX_TOKENS,
                   "response_format": {"type": "json_object"},
                   "messages": [{"role": "system", "content": system_prompt},
                                {"role": "user", "content": transcript}]},
@@ -62,7 +68,7 @@ def _call_model(system_prompt, transcript):
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                      "Content-Type": "application/json"},
-            json={"model": model, "max_tokens": 1024, "temperature": 0,
+            json={"model": model, "max_tokens": _ANTHROPIC_MAX_TOKENS, "temperature": 0,
                   "system": system_prompt,
                   "messages": [{"role": "user", "content": transcript}]},
             timeout=90)

@@ -13,11 +13,11 @@ Return ONLY a single JSON object, no prose, no markdown, no code fences. Schema:
 
 {
   "ask_before_close_score": <integer 0-5>,
-  "ask_before_close_reason": "<1-3 concise evidence-based sentences>",
+  "ask_before_close_reason": "<3-5 concise evidence-based sentences>",
   "customer_sentiment_score": <integer 1-5>,
-  "customer_sentiment_reason": "<1-3 concise evidence-based sentences>",
+  "customer_sentiment_reason": "<3-5 concise evidence-based sentences>",
   "agent_heart_score": <integer 1-5>,
-  "agent_heart_reason": "<1-3 concise evidence-based sentences>"
+  "agent_heart_reason": "<3-5 concise evidence-based sentences>"
 }
 
 === EVIDENCE RULES (all three judgments) ===

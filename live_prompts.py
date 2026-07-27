@@ -19,7 +19,7 @@ Return ONLY a JSON object, no prose or fences:
   "current_sentiment": <integer 1-5, 5=positive 1=highly negative>,
   "risk_score": <integer 0-5, 0=healthy, 5=about to churn/escalate>,
   "risk_flag": <true|false>,
-  "risk_reason": "<1-3 concise, evidence-based sentences naming the specific signals>"
+  "risk_reason": "<3-5 concise, evidence-based sentences naming the specific signals>"
 }
 
 Assess risk from these signals (presence and, crucially, TREND):
@@ -47,7 +47,7 @@ Return ONLY a JSON object, no prose or fences:
   "safe_to_close": <true|false>,
   "open_items": ["<short description of each unresolved item>"],
   "last_customer_confirmed": <true|false>,
-  "warning": "<empty string if safe; otherwise 1-2 sentences on what is unresolved>"
+  "warning": "<empty string if safe; otherwise 2-4 sentences on what is unresolved>"
 }
 
 Decide as follows:

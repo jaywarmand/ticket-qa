@@ -21,6 +21,12 @@ from prompt import SYSTEM_PROMPT
 
 PROVIDER = os.environ.get("PROVIDER", "anthropic").lower()
 
+# Output-size ceiling for the model's JSON response (scores + reasons).
+# Tunable via env without code changes; raise together with the sentence
+# guidance in the prompt(s) if you want longer reasons.
+_ANTHROPIC_MAX_TOKENS = int(os.environ.get("ANTHROPIC_MAX_TOKENS", "1536"))
+_OPENAI_MAX_TOKENS = int(os.environ.get("OPENAI_MAX_TOKENS", "1536"))
+
 _RANGES = {
     "ask_before_close_score": (0, 5),
     "customer_sentiment_score": (1, 5),
@@ -69,6 +75,7 @@ def _call_openai(transcript):
             "model": model,
             "temperature": 0,
             "response_format": {"type": "json_object"},
+            "max_tokens": _OPENAI_MAX_TOKENS,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": transcript},
@@ -88,7 +95,7 @@ def _call_anthropic(transcript):
                  "Content-Type": "application/json"},
         json={
             "model": model,
-            "max_tokens": 1024,
+            "max_tokens": _ANTHROPIC_MAX_TOKENS,
             "temperature": 0,
             "system": SYSTEM_PROMPT,
             "messages": [{"role": "user", "content": transcript}],
