@@ -86,13 +86,19 @@ def _batch_read(obj_type, ids, props):
     if not ids:
         return []
     url = f"{BASE}/crm/v3/objects/{obj_type}/batch/read"
-    body = {"properties": props, "inputs": [{"id": str(i)} for i in ids]}
-    r = requests.post(url, headers=_headers(), json=body, timeout=30)
-    if r.status_code != 200:
-        _warn(f"batch read {obj_type} ({len(ids)} ids) -> HTTP "
-              f"{r.status_code}: {r.text[:200]}")
-        return []
-    return r.json().get("results", [])
+    # HubSpot's batch/read accepts at most 100 inputs per call; chunk so tickets
+    # with >100 engagements of one type don't 400 and silently lose all of them.
+    results = []
+    for start in range(0, len(ids), 100):
+        chunk = ids[start:start + 100]
+        body = {"properties": props, "inputs": [{"id": str(i)} for i in chunk]}
+        r = requests.post(url, headers=_headers(), json=body, timeout=30)
+        if r.status_code != 200:
+            _warn(f"batch read {obj_type} ({len(chunk)} ids) -> HTTP "
+                  f"{r.status_code}: {r.text[:200]}")
+            continue
+        results += r.json().get("results", [])
+    return results
 
 
 def _ts(props, *keys):
