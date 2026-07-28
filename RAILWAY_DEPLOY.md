@@ -1,137 +1,118 @@
-# Deploying to Railway — step by step (first-time friendly)
+# Deploying to Railway + HubSpot — step by step
 
-This walks you from "files on your computer" to "HubSpot is calling your live
-service." No prior Railway experience assumed. Expect ~1–2 hours the first time,
-most of it one-time learning.
+Takes you from "code on GitHub" to "HubSpot calls your live service." No prior
+Railway experience assumed. ~1 hour the first time.
 
-There are two ways to get your code into Railway. **Option A (GitHub)** is
-recommended — every future change redeploys automatically when you push. Option B
-(CLI upload) is a fallback if you'd rather not use GitHub.
+This project authenticates to HubSpot with a **Service Key** (not a Private App),
+so there is NO client secret / signature. The webhook is protected instead by a
+shared `WEBHOOK_KEY` carried in the URL (`?key=...`).
 
 ---
 
-## Before you start — gather your secrets
-You'll paste these into Railway later. Have them ready (see `.env.example`):
-- HubSpot Private App **access token** (`HUBSPOT_TOKEN`)
-- HubSpot Private App **client secret** (`HUBSPOT_CLIENT_SECRET`)
+## Before you start — gather these
+- HubSpot **Service Key** token -> `HUBSPOT_TOKEN`
 - Your model key — **Anthropic** (`ANTHROPIC_API_KEY`) or **OpenAI** (`OPENAI_API_KEY`)
-- Your **pre-close stage id** (`TRIGGER_STAGE_ID`) — ask if you're unsure; it can be looked up
+- A long random **webhook key** — generate one with:
+  `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
-> Create the HubSpot Private App first (Settings → Integrations → Private Apps →
-> Create). Scopes: `tickets` read+write, `crm.objects.contacts.read`,
-> `conversations.read`. Copy the token and the client secret.
-
----
-
-## Option A — Deploy from GitHub (recommended)
-
-### 1. Put the code in a GitHub repo
-- Create a new **private** repo on GitHub (e.g. `ticket-qa`).
-- Upload all the project files to it. Easiest no-terminal way: on the repo page,
-  click **Add file → Upload files**, drag in every file from the project folder
-  EXCEPT anything secret, then **Commit**.
-- The included `.gitignore` already keeps `.env`, PDFs, and build cruft out. Never
-  upload a file containing real tokens.
-
-### 2. Create the Railway project
-- Go to railway.app → **New Project**.
-- Choose **Deploy from GitHub repo**.
-- If it's your first time, Railway will ask to connect your GitHub account and
-  which repos it can see — grant access to the `ticket-qa` repo.
-- Pick the repo. Railway starts building immediately using the included
-  `railway.json` and `Procfile`, so it already knows to run the web service.
-
-### 3. Add your environment variables
-- Open the service → **Variables** tab → **Raw Editor** (fastest).
-- Paste the contents of `.env.example`, then replace the placeholder values with
-  your real ones. Delete the provider block you're NOT using.
-- **Do not** add a `PORT` variable — Railway sets it automatically and the code
-  reads it.
-- Save. Railway redeploys with the new variables.
-
-### 4. Give it a public URL
-- Service → **Settings** → **Networking** → **Generate Domain**.
-- You'll get something like `https://ticket-qa-production.up.railway.app`.
-- Copy it — this is your service's base URL.
-
-### 5. Confirm it's alive (before touching HubSpot)
-- In your browser, visit `https://<your-domain>/health`.
-- You should see: `{"ok": true, "provider": "anthropic"}` (or `openai`).
-- If you see that, the hard part is done. If not, see Troubleshooting below.
+### Required Service Key scopes
+In HubSpot -> Settings -> Integrations -> your Service Key -> Scopes, enable:
+- `tickets` (read + write) — it writes scores back
+- `crm.objects.contacts.read`
+- `conversations.read`
+- `sales-email-read` — REQUIRED. Without it, `emails/batch/read` returns 403 and
+  the transcript silently loses ALL email content, skewing scores low.
 
 ---
 
-## Option B — Deploy without GitHub (CLI upload)
-Only if you'd rather skip GitHub. Requires installing the Railway CLI.
+## Phase 1 — Host the service on Railway (from GitHub)
+
+The repo already lives on GitHub. Every push auto-redeploys.
+
+### 1. Create the Railway project
+- railway.app -> **New Project** -> **Deploy from GitHub repo**.
+- Grant Railway access to the repo, then select it.
+- Railway auto-detects `railway.json` + `Procfile` and builds the web service
+  (`python score_ticket.py --serve`). No build config needed.
+
+### 2. Add environment variables
+Service -> **Variables** -> **Raw Editor**, paste and fill in real values:
 ```
-npm i -g @railway/cli      # install the CLI
-railway login              # opens browser to log in
-cd ticket-qa               # the project folder
-railway init               # create a new project (follow prompts)
-railway up                 # upload + deploy this folder
+HUBSPOT_TOKEN=pat-na1-...
+PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+ANTHROPIC_MAX_TOKENS=1536
+WEBHOOK_KEY=paste-your-generated-key-here
+CLOSURE_BLOCKING=false
 ```
-Then set variables and generate a domain in the Railway dashboard exactly as in
-Option A steps 3–5. Future updates mean re-running `railway up`.
+- **Do NOT** set `PORT` — Railway sets it and the code reads it.
+- No `HUBSPOT_CLIENT_SECRET` needed (Service Key uses the `?key=` method).
+- For OpenAI instead: set `PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL`,
+  and optionally `OPENAI_MAX_TOKENS`.
+
+### 3. Give it a public URL
+Service -> **Settings** -> **Networking** -> **Generate Domain**. You get e.g.
+`https://ticket-qa-production.up.railway.app`. Copy it.
+
+### 4. Confirm it's alive (before touching HubSpot)
+Visit `https://<domain>/health`. Expect:
+`{"ok": true, "provider": "anthropic", "modes": ["qa", "closure", "risk"]}`
 
 ---
 
-## Connect HubSpot to your live service
-Only after `/health` works.
+## Phase 2 — Connect HubSpot workflows
 
-All three modes share ONE service. The `?mode=` on the URL selects the logic, so
-you build three near-identical HD-pipeline workflows that differ only in (a) the
-enrollment stage and (b) the URL suffix.
+All three modes share ONE service; `?mode=` on the URL selects the logic. Build
+three ticket-based workflows differing only in the enrollment stage and the URL.
+Confirmed stage IDs for this portal's HD pipeline (144473189):
 
-| Workflow | Enroll when ticket status = | Stage ID | Webhook URL |
-|---|---|---|---|
-| Retrospective QA | Closed | 245698182 | `https://<domain>/webhook?key=YOUR_KEY` |
-| Closure gate | Resolved | 245844492 | `https://<domain>/webhook?mode=closure&key=YOUR_KEY` |
-| Sideways detector | Customer Responded | 245705643 | `https://<domain>/webhook?mode=risk&key=YOUR_KEY` |
+| Workflow           | Enroll when stage =        | Webhook URL (POST)                                        |
+|--------------------|----------------------------|----------------------------------------------------------|
+| Retrospective QA   | Closed (245698182)         | `https://<domain>/webhook?key=YOUR_KEY`                  |
+| Closure gate       | Resolved (245844492)       | `https://<domain>/webhook?mode=closure&key=YOUR_KEY`    |
+| Sideways detector  | Customer Responded (245705643) | `https://<domain>/webhook?mode=risk&key=YOUR_KEY`   |
 
-Replace `YOUR_KEY` with the exact value you set for `WEBHOOK_KEY` in Railway.
-(Service Keys have no signing secret, so this shared key is what keeps random
-callers from running your model bill.)
+Replace `<domain>` with your Railway domain and `YOUR_KEY` with the exact
+`WEBHOOK_KEY` value from Railway. A mismatch returns HTTP 401.
 
-For each: HubSpot → Automation → **Workflows** → Create → **Ticket-based** →
-set the enrollment trigger (add a *Pipeline is HD* filter too) → add action
-**Send a webhook** → Method **POST**, the URL from the table → turn it on.
+For each: HubSpot -> Automation -> **Workflows** -> Create -> **Ticket-based** ->
+enrollment trigger = *Ticket stage is [that stage]* -> action **Send a webhook**
+-> Method **POST**, URL from the table -> webhook auth **None** (the `?key=` is
+the auth) -> turn it **On**.
 
-Leave `TRIGGER_STAGE_ID` blank — the workflow does the stage filtering, so the
-service processes whatever it's handed. Authentication on the webhook action can
-be left as none; the service authenticates via the `?key=` shared secret in the
-URL (see `WEBHOOK_KEY`).
+Leave `TRIGGER_STAGE_ID` unset — the workflow does the stage filtering.
 
-Roll these out one at a time (QA first), not all at once — see launch order below.
-
-> The service checks HubSpot's signature on every webhook using
-> `HUBSPOT_CLIENT_SECRET`, so random callers can't run up your model bill.
+> Webhook mode ALWAYS writes (there is no dry-run over the webhook). Validate
+> with the local CLI first: `python score_ticket.py <ticket_id> --dry-run`.
 
 ---
 
 ## Recommended launch order
 1. Deploy, confirm `/health`.
-2. Test scoring WITHOUT writing: the service always writes, so for a safe first
-   look, use the CLI locally instead — `python score_ticket.py <ticket_id> --dry-run`
-   — against 10–15 real tickets and eyeball the output.
-3. Once the scores look right, turn on ONE workflow (retrospective QA is simplest).
-4. Watch it for a day of real tickets.
-5. Add the closure gate (warn-only), then the sideways detector.
-6. After you trust the closure gate, set `CLOSURE_BLOCKING=true`.
+2. Dry-run 10-15 real tickets locally and eyeball the output.
+3. Turn on ONE workflow — Retrospective QA (simplest). Watch a day.
+4. Add the Closure gate (stays warn-only while `CLOSURE_BLOCKING=false`).
+5. Add the Sideways detector.
+6. Once you trust the closure gate, set `CLOSURE_BLOCKING=true` and wire the
+   workflow to honor `safe_to_close` (revert the stage when false).
 
 ---
 
 ## Troubleshooting
-- **`/health` won't load / app keeps restarting:** check the **Deploy Logs**
-  (service → Deployments → View Logs). A missing or misnamed variable is the most
-  common cause — compare against `.env.example` exactly.
-- **Webhook does nothing:** confirm the workflow is ON and the URL ends in
-  `/webhook`. Check Deploy Logs for incoming requests. A 401 means the signature
-  didn't match — verify `HUBSPOT_CLIENT_SECRET` matches the Private App.
-- **Scores look thin / all conservative:** the ticket may lack associated
-  conversations. (We checked your portal — associations are healthy — but a
-  specific ticket worked entirely by phone with nothing logged would still be
-  thin.)
-- **"module not found" on build:** ensure `requirements.txt` was uploaded.
-- **Costs higher than expected:** confirm `ANTHROPIC_MODEL` / `OPENAI_MODEL` is
-  the small model, not a large one, and that the sideways detector isn't
-  enrolling on every internal note.
+- **`/health` won't load / app restarts:** check **Deploy Logs** (service ->
+  Deployments -> View Logs). A missing/misnamed variable is the usual cause —
+  compare against `.env.example`.
+- **Webhook returns 401:** the `?key=` in the URL doesn't match `WEBHOOK_KEY` in
+  Railway. Re-copy it exactly.
+- **Webhook does nothing:** confirm the workflow is ON and the URL path is
+  `/webhook`. Check Deploy Logs for the incoming request.
+- **Scores look thin / all conservative:** most often the `sales-email-read`
+  scope is missing (emails 403 — you'll see a `[hubspot_client] WARNING` in the
+  logs), or the specific ticket genuinely has no associated communications.
+  The code now logs a stderr WARNING on any non-200 fetch, so watch the logs.
+- **High-volume tickets:** batch reads are chunked to 100 inputs, so tickets
+  with >100 engagements of one type are handled (previously they 400'd).
+- **Costs higher than expected:** keep `ANTHROPIC_MODEL`/`OPENAI_MODEL` on the
+  small model, and make sure the sideways detector enrolls on real customer
+  replies, not every internal note.
