@@ -39,6 +39,21 @@ def score_one(ticket_id, dry_run=False):
     return scores, len(engagements)
 
 
+def _ticket_id(ev):
+    """Pull a ticket id from an event/record dict, tolerating the several shapes
+    HubSpot uses: app-webhook events ({objectId}) and workflow 'Send a webhook'
+    records (id / hs_object_id, sometimes nested under 'properties')."""
+    for k in ("objectId", "hs_object_id", "ticketId", "id", "vid"):
+        if ev.get(k):
+            return ev[k]
+    props = ev.get("properties")
+    if isinstance(props, dict):
+        for k in ("hs_object_id", "objectId"):
+            if props.get(k):
+                return props[k]
+    return None
+
+
 # ---------- webhook server ----------
 # Only import Flask if serving, so the CLI path has no extra dependency.
 def _make_app():
@@ -99,16 +114,22 @@ def _make_app():
         mode = request.args.get("mode", "qa").lower()
         if mode not in ("qa", "closure", "risk"):
             mode = "qa"
-        events = request.get_json(force=True, silent=True) or []
+        payload = request.get_json(force=True, silent=True)
+        # Accept BOTH shapes: an app-webhook array [{objectId,...}] and a
+        # workflow "Send a webhook" single record object {..., id/hs_object_id}.
+        events = payload if isinstance(payload, list) else [payload]
         results = []
         for ev in events:
-            # HubSpot property-change events carry objectId + propertyValue.
-            # Stage filtering is normally done by the HubSpot workflow, so
-            # TRIGGER_STAGE is optional and left blank in the multi-workflow setup.
+            if not isinstance(ev, dict):
+                continue
+            # Optional stage filter; normally the workflow filters, so
+            # TRIGGER_STAGE is left blank in the multi-workflow setup.
             if TRIGGER_STAGE and str(ev.get("propertyValue")) != TRIGGER_STAGE:
                 continue
-            tid = ev.get("objectId")
+            tid = _ticket_id(ev)
             if not tid:
+                print(f"[webhook] no ticket id in payload item; keys="
+                      f"{list(ev.keys())}", file=sys.stderr)
                 continue
             try:
                 info = _dispatch(mode, tid)
