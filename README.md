@@ -107,11 +107,19 @@ complements those; it detects open items the agent may have missed.)
 ```
 python live_monitor.py risk <ticket_id> --dry-run
 ```
-Trigger: on every new customer inbound (workflow: enroll when a customer email/
-chat is received). It writes a 0–5 risk score + flag, and appends today's
-sentiment to `sentiment_history` (last 6 points kept). The model flags on
-*trajectory* (e.g. 4→3→2) and escalation language, not just absolute low scores —
-so you catch tickets sliding before they hit rock bottom.
+Trigger: on any new ticket activity (workflow: enroll on a customer email/chat
+received AND on agent messages), so both risk and the live HEART score below
+stay current. It writes a 0–5 risk score + flag, and appends today's sentiment
+to `sentiment_history` (last 6 points kept). The model flags on *trajectory*
+(e.g. 4→3→2) and escalation language, not just absolute low scores — so you
+catch tickets sliding before they hit rock bottom.
+
+Live Agent HEART: the same call also scores the agent's handling *so far* and
+writes it to `agent_heart_score` / `agent_heart_reason` — the SAME properties the
+retrospective QA uses. So HEART updates live while the ticket is open; the QA run
+at close then overwrites it with the final authoritative value. The live prompt
+does NOT penalize for the absence of closure/confirmation (the ticket is ongoing).
+Ask-Before-Close is deliberately NOT scored live (meaningless mid-conversation).
 
 ## Premature-closure gate
 ```

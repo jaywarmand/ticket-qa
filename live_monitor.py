@@ -116,6 +116,7 @@ def run_risk(ticket_id, dry_run=False):
     data["risk_score"] = max(0, min(5, int(data["risk_score"])))
     data["current_sentiment"] = max(1, min(5, int(data["current_sentiment"])))
     data["risk_flag"] = bool(data.get("risk_flag"))
+    data["agent_heart_score"] = max(1, min(5, int(data["agent_heart_score"])))
 
     # append today's sentiment point, keep last N
     history.append({"t": date.today().isoformat(), "s": data["current_sentiment"]})
@@ -127,6 +128,10 @@ def run_risk(ticket_id, dry_run=False):
             "ticket_risk_flag": data["risk_flag"],
             "ticket_risk_reason": str(data["risk_reason"])[:65000],
             "sentiment_history": json.dumps(history),
+            # Live HEART: update the retrospective property while still open; the
+            # QA run at close overwrites it with the final authoritative value.
+            "agent_heart_score": data["agent_heart_score"],
+            "agent_heart_reason": str(data["agent_heart_reason"])[:65000],
         }
         _patch(ticket_id, write_props)
     data["_history"] = history

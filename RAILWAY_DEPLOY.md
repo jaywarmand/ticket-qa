@@ -71,7 +71,7 @@ Confirmed stage IDs for this portal's HD pipeline (144473189):
 |--------------------|----------------------------|----------------------------------------------------------|
 | Retrospective QA   | Closed (245698182)         | `https://<domain>/webhook?key=YOUR_KEY`                  |
 | Closure gate       | Resolved (245844492)       | `https://<domain>/webhook?mode=closure&key=YOUR_KEY`    |
-| Sideways detector  | Customer Responded (245705643) | `https://<domain>/webhook?mode=risk&key=YOUR_KEY`   |
+| Sideways + live HEART | Any new activity (customer reply OR agent message) | `https://<domain>/webhook?mode=risk&key=YOUR_KEY`   |
 
 Replace `<domain>` with your Railway domain and `YOUR_KEY` with the exact
 `WEBHOOK_KEY` value from Railway. A mismatch returns HTTP 401.
@@ -82,6 +82,12 @@ enrollment trigger = *Ticket stage is [that stage]* -> action **Send a webhook**
 the auth) -> turn it **On**.
 
 Leave `TRIGGER_STAGE_ID` unset — the workflow does the stage filtering.
+
+The **Sideways + live HEART** workflow is the exception: enroll it on *activity*,
+not a stage — re-enrollment on every new customer email/chat AND every agent
+message. Each run refreshes the risk score and the live `agent_heart_score`. More
+activity = more model calls, so keep the model on Haiku. (Its `agent_heart_score`
+is intentionally the same property the close-time QA run finalizes.)
 
 > Webhook mode ALWAYS writes (there is no dry-run over the webhook). Validate
 > with the local CLI first: `python score_ticket.py <ticket_id> --dry-run`.

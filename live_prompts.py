@@ -19,7 +19,9 @@ Return ONLY a JSON object, no prose or fences:
   "current_sentiment": <integer 1-5, 5=positive 1=highly negative>,
   "risk_score": <integer 0-5, 0=healthy, 5=about to churn/escalate>,
   "risk_flag": <true|false>,
-  "risk_reason": "<3-5 concise, evidence-based sentences naming the specific signals>"
+  "risk_reason": "<3-5 concise, evidence-based sentences naming the specific signals>",
+  "agent_heart_score": <integer 1-5, the agent's handling SO FAR>,
+  "agent_heart_reason": "<3-5 concise, evidence-based sentences on the agent's handling to date>"
 }
 
 Assess risk from these signals (presence and, crucially, TREND):
@@ -36,6 +38,11 @@ Guidance:
 - Do not flag simply because the issue is unresolved; unresolved-but-calm-and-progressing is not high risk.
 - If history is empty, judge on absolute signals only and say so in risk_reason.
 - Use only supplied content. Do not invent. Weight the most recent customer message most heavily.
+
+AGENT HEART (live, 1-5): judge the agent's handling SO FAR on this still-open ticket — empathy/tone, ownership, clarity, responsiveness, usefulness, and whether next steps were given.
+- 5 = excellent handling to date; 4 = good, minor gap; 3 = adequate/partial; 2 = weak (low empathy/clarity/ownership); 1 = poor (dismissive, ignored the customer, or unresponsive to urgency).
+- This is an IN-PROGRESS assessment: do NOT penalize for the absence of closure, resolution confirmation, or an ask-before-close — the ticket is ongoing. Judge only how well the agent has handled it up to now.
+- Score independently of sentiment/risk; base it on the agent's actions and communications, not the customer's mood.
 """
 
 CLOSURE_GATE_PROMPT = """A support ticket is about to be CLOSED. Your job is to catch premature closure: cases where the customer still has an open question or an unmet request that the agent has not addressed.
